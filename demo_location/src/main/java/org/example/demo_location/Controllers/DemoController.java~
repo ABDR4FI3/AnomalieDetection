@@ -18,8 +18,7 @@ public class DemoController {
 
     @PostMapping("/position")
     public Double demo(@RequestBody PositionDto position) {
-        String message = "Position received: {}"+ position.getLatitude() + " "+ position.getLongitude();
-        logger.warn(message);
+        logger.warn("Position received: {}", position.getLatitude() , position.getLongitude());
         Random random = new Random();
         double dangerPercentage = random.nextInt(101); // Random number between 0 and 100
         logger.warn("Returning danger percentage: {}", dangerPercentage);
