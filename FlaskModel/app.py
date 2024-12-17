@@ -1,12 +1,13 @@
 import pickle
 import numpy as np
-from flask import Flask, request, jsonify
-
+from flask import Flask, request, jsonify, Response
+import pandas as pd
 app = Flask(__name__)
 
 # Define the paths to the model and scaler
 MODEL_PATH = "static/kmeans_model.pkl"
 SCALER_PATH = "static/scaler.pkl"
+DATA_PATH = "static/crime_data.pkl"  # Pickled crime data
 
 # Step 1: Load the pre-trained model and scaler from the specified paths
 try:
@@ -23,6 +24,14 @@ try:
 except Exception as e:
     print("Error loading file:", e)
 
+# Step 2: Load the crime data from the pickled file
+try:
+    crime_data = pd.read_pickle(DATA_PATH)
+    print("Crime data loaded successfully!")
+except Exception as e:
+    print("Error loading crime data:", e)
+
+
 # Analyzer class for simplicity
 class Analyzer:
     def __init__(self, kmeans, scaler):
@@ -31,7 +40,41 @@ class Analyzer:
 
 analyzer = Analyzer(kmeans, scaler)
 
-# Step 2: Danger likelihood calculation function
+#Step 3 :
+@app.route('/crime_data', methods=['GET'])
+def get_crime_data():
+    try:
+        # Get page number and size from query parameters
+        page = int(request.args.get('page', 1))  # Default page is 1
+        page_size = int(request.args.get('page_size', 20000))  # Default page size is 20000
+
+        # Calculate start and end indices
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+
+        # Slice the data
+        data_slice = crime_data.iloc[start_idx:end_idx].to_dict(orient='records')
+
+        # Prepare response
+        response = {
+            'page': page,
+            'page_size': page_size,
+            'total_records': len(crime_data),
+            'data': data_slice
+        }
+
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+@app.route('/crime_data_stream', methods=['GET'])
+def get_crime_data_stream():
+    def generate():
+        for _, row in crime_data.iterrows():
+            yield f"{row.to_json()}\n"
+
+    return Response(generate(), mimetype='application/json')
+
+# Step 4: Danger likelihood calculation function
 def calculate_danger_likelihood(lat, lon, analyzer, density_weight=0.1, distance_weight=0.9):
     scaled_coords = analyzer.scaler.transform([[lat, lon]])[0]
 
