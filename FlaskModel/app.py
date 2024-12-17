@@ -1,81 +1,71 @@
-import os
-from flask import Flask, request, jsonify
-import pandas as pd
+import pickle
 import numpy as np
-import joblib
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Path to the static folder where the models are stored
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'static', 'kmeans_model.pkl')
-SCALER_PATH = os.path.join(BASE_DIR, 'static', 'scaler.pkl')
+# Define the paths to the model and scaler
+MODEL_PATH = "static/kmeans_model.pkl"
+SCALER_PATH = "static/scaler.pkl"
 
-# Load the saved model and scaler
-kmeans = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
+# Step 1: Load the pre-trained model and scaler from the specified paths
+try:
+    # Test loading the scaler
+    with open(SCALER_PATH, 'rb') as scaler_file:
+        scaler = pickle.load(scaler_file)
+    print("Scaler loaded successfully:", scaler)
 
-# Mock Analyzer class for storing cluster information
+    # Test loading the KMeans model
+    with open(MODEL_PATH, 'rb') as model_file:
+        kmeans = pickle.load(model_file)
+    print("KMeans model loaded successfully:", kmeans)
+
+except Exception as e:
+    print("Error loading file:", e)
+
+# Analyzer class for simplicity
 class Analyzer:
     def __init__(self, kmeans, scaler):
         self.cluster_centers_ = kmeans.cluster_centers_
         self.scaler = scaler
 
-# Initialize analyzer
 analyzer = Analyzer(kmeans, scaler)
 
-# Load clustered data for density calculations
-DATA_PATH = os.path.join(BASE_DIR, 'static', 'CleanedDataCrime.csv')
-df_cleaned = pd.read_csv(DATA_PATH)[['LAT', 'LON']]
-df_cleaned['Cluster'] = kmeans.labels_
-
-# Function to calculate danger likelihood
-def calculate_danger_likelihood(lat, lon, clustered_df, analyzer, density_weight=0.1, distance_weight=0.9):
-    # Convert input coordinates to scaled values
+# Step 2: Danger likelihood calculation function
+def calculate_danger_likelihood(lat, lon, analyzer, density_weight=0.1, distance_weight=0.9):
     scaled_coords = analyzer.scaler.transform([[lat, lon]])[0]
 
     # Calculate distances to all centroids
     distances = np.linalg.norm(analyzer.cluster_centers_ - scaled_coords, axis=1)
-
-    # Find the nearest cluster
     nearest_cluster = np.argmin(distances)
     nearest_distance = distances[nearest_cluster]
 
-    # Danger likelihood based on proximity to centroid
     max_distance = np.max(distances)
-    proximity_score = max(0, 1 - nearest_distance / max_distance)  # Linear decay
+    proximity_score = max(0, 1 - nearest_distance / max_distance)
 
-    # Density-based danger (optional, if density is provided)
-    cluster_density = clustered_df[clustered_df['Cluster'] == nearest_cluster].shape[0]
-    max_density = clustered_df['Cluster'].value_counts().max()
-    density_score = cluster_density / max_density
+    # For simplicity, we omit density score since we don't have a loaded dataset
+    density_score = 1  # Assume uniform density
 
-    # Combine the scores
     danger_likelihood = (distance_weight * proximity_score + density_weight * density_score) * 100
-
     return danger_likelihood, nearest_cluster
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    # Parse incoming JSON data
-    data = request.get_json()
-
+# Step 3: Flask API endpoint
+@app.route('/danger', methods=['POST'])
+def get_danger_level():
     try:
-        lat = float(data['latitude'])
-        lon = float(data['longitude'])
+        data = request.get_json()
+        lat = float(data['lat'])
+        lon = float(data['lon'])
 
-        # Calculate danger likelihood
-        danger_percentage, cluster_id = calculate_danger_likelihood(
-            lat, lon, df_cleaned, analyzer
-        )
+        # Calculate danger percentage
+        danger_percentage, cluster_id = calculate_danger_likelihood(lat, lon, analyzer)
 
         response = {
             'latitude': lat,
             'longitude': lon,
-            'danger_percentage': round(danger_percentage, 2),
-            'nearest_cluster': int(cluster_id)
+            'cluster_id': int(cluster_id),
+            'danger_percentage': round(danger_percentage, 2)
         }
-
         return jsonify(response), 200
 
     except Exception as e:
