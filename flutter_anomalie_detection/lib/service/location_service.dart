@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 class LocationService {
   final String _baseUrl = 'http://10.0.2.2:8080/api/demo/position';
-
+  
   Future<double> getDanger(double lat, double lon) async {
     try {
       final response = await http.post(
