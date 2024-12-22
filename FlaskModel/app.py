@@ -2,7 +2,10 @@ import pickle
 import numpy as np
 from flask import Flask, request, jsonify, Response
 import pandas as pd
+from flask_cors import CORS
+
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Define the paths to the model and scaler
 MODEL_PATH = "static/kmeans_model.pkl"
